@@ -1,0 +1,107 @@
+---
+title: "StatisticalLearning"
+author: "Jesus Luevano"
+date: "2023-12-07"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(glmnet)
+
+set.seed(11)
+```
+
+
+
+```{r}
+bwt_df = 
+  read_csv("data/birthweight.csv") |> 
+  janitor::clean_names() |>
+  mutate(
+    babysex = as.factor(babysex),
+    babysex = fct_recode(babysex, "male" = "1", "female" = "2"),
+    frace = as.factor(frace),
+    frace = fct_recode(
+      frace, "white" = "1", "black" = "2", "asian" = "3", 
+      "puerto rican" = "4", "other" = "8"),
+    malform = as.logical(malform),
+    mrace = as.factor(mrace),
+    mrace = fct_recode(
+      mrace, "white" = "1", "black" = "2", "asian" = "3", 
+      "puerto rican" = "4")) |> 
+  sample_n(200)
+```
+
+get predictors and outcome.
+
+```{r}
+#set up matrix for all the variables, lasso good for when have LOTS of variables
+x = model.matrix(bwt ~ ., bwt_df)[, -1]
+y = bwt_df %>% pull(bwt)
+
+```
+
+```{r lasso}
+lambda = 10^(seq(3, -2, -0.1))
+
+lasso_fit =
+  glmnet(x, y, lambda = lambda)
+
+lasso_cv = 
+  cv.glmnet(x, y, lambda = lambda)
+
+lambda_optimal = lasso_cv$lambda.min
+```
+
+Let's look at the output, lasso results!
+
+```{r}
+lasso_fit %>%
+  broom::tidy() %>%
+  #filter(step == 42)
+  select(term, lambda, estimate) %>%
+  filter(term != "(Intercept)") %>%
+  complete(term, lambda, fill = list(estimate = 0)) %>% 
+  ggplot(aes(x = log(lambda, 10), y = estimate)) +
+  geom_path(aes(color = term))
+```
+
+Show the CV results. 
+
+```{r}
+lasso_cv %>%
+  broom::tidy() %>%
+  ggplot(aes(x = log(lambda, 10), y = estimate)) +
+  geom_point()
+```
+
+
+## Penguins (for k-means, centroids)
+
+```{r}
+library(palmerpenguins)
+
+data("penguins")
+
+penguins %>% 
+  ggplot(aes(x = bill_length_mm, y = flipper_length_mm, color = species)) + 
+  geom_point()
+
+penguins = penguins %>%
+  select(species, bill_length_mm, flipper_length_mm) %>%
+  drop_na()
+```
+
+```{r}
+kmeans_fit = penguins %>% 
+  select(-species) %>%
+  scale() %>%
+  kmeans(centers = 3)
+
+penguins |>
+  broom::augment(kmeans_fit, data = _) |>
+  ggplot(aes(x = bill_length_mm, y - flipper_length_mm, color = .cluster)) + 
+  geom_point() #forgot to do scaling
+```
+
